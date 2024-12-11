@@ -53,7 +53,11 @@ class Swarm:
             else agent.instructions
         )
         # history contains "sender", which is unsupported
-        history = [{k: v for k, v in message.items() if k != "sender"} for message in history]
+        history = [
+            {
+                k: v for k, v in message.items()
+                if k not in ["sender", "tool_name"]
+            } for message in history]
         messages = [{"role": "system", "content": instructions}] + history
         debug_print(debug, "Getting chat completion for...:", messages)
 
