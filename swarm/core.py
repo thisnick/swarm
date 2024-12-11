@@ -57,7 +57,8 @@ class Swarm:
             {
                 k: v for k, v in message.items()
                 if k not in ["sender", "tool_name"]
-            } for message in history]
+            } for message in history
+        ]
         messages = [{"role": "system", "content": instructions}] + history
         debug_print(debug, "Getting chat completion for...:", messages)
 
