@@ -1,37 +1,48 @@
 import json
+from typing import Optional, cast
 
 from swarm import Swarm
+from swarm.types import (
+    Agent,
+    Response,
+    StreamingResponse,
+    StreamingChunk,
+    DelimStreamingChunk,
+    ResponseStreamingChunk,
+)
 
 
-def process_and_print_streaming_response(response):
+def process_and_print_streaming_response(response : StreamingResponse) -> Optional[Response]:
     content = ""
     last_sender = ""
 
     for chunk in response:
         if "sender" in chunk:
+            chunk = cast(StreamingChunk, chunk)
             last_sender = chunk["sender"]
 
-        if "content" in chunk and chunk["content"] is not None:
+        if "content" in chunk and cast(StreamingChunk, chunk)["content"] is not None:
+            chunk = cast(StreamingChunk, chunk)
             if not content and last_sender:
                 print(f"\033[94m{last_sender}:\033[0m", end=" ", flush=True)
                 last_sender = ""
             print(chunk["content"], end="", flush=True)
             content += chunk["content"]
 
-        if "tool_calls" in chunk and chunk["tool_calls"] is not None:
-            for tool_call in chunk["tool_calls"]:
+        if "tool_calls" in chunk and cast(StreamingChunk, chunk)["tool_calls"] is not None:
+            for tool_call in cast(StreamingChunk, chunk)["tool_calls"]:
                 f = tool_call["function"]
                 name = f["name"]
                 if not name:
                     continue
                 print(f"\033[94m{last_sender}: \033[95m{name}\033[0m()")
 
-        if "delim" in chunk and chunk["delim"] == "end" and content:
+        if "delim" in chunk and cast(DelimStreamingChunk, chunk)["delim"] == "end" and content:
             print()  # End of response message
             content = ""
 
         if "response" in chunk:
-            return chunk["response"]
+            return cast(ResponseStreamingChunk, chunk)["response"]
 
 
 def pretty_print_messages(messages) -> None:
@@ -58,7 +69,7 @@ def pretty_print_messages(messages) -> None:
 
 
 def run_demo_loop(
-    starting_agent, context_variables=None, stream=False, debug=False
+    starting_agent: Agent, context_variables: dict = {}, stream: bool = False, debug: bool = False
 ) -> None:
     client = Swarm()
     print("Starting Swarm CLI 🐝")
@@ -79,9 +90,14 @@ def run_demo_loop(
         )
 
         if stream:
+            response = cast(StreamingResponse, response)
             response = process_and_print_streaming_response(response)
         else:
+            response = cast(Response, response)
             pretty_print_messages(response.messages)
+
+        assert response is not None
+        assert response.agent is not None
 
         messages.extend(response.messages)
         agent = response.agent

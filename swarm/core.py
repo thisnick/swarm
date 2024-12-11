@@ -2,7 +2,11 @@
 import copy
 import json
 from collections import defaultdict
-from typing import List, Callable, Union
+from typing import (
+    List,
+    Optional,
+    cast,
+)
 
 # Package/library imports
 from openai import OpenAI
@@ -13,15 +17,19 @@ from .util import function_to_json, debug_print, merge_chunk
 from .types import (
     Agent,
     AgentFunction,
-    ChatCompletionMessage,
+    ChatCompletionChunk,
+    ChatCompletion,
     ChatCompletionMessageToolCall,
     Function,
     Response,
     Result,
+    Stream,
+    StreamingResponse,
+    StreamingChunk,
+    Message,
 )
 
 __CTX_VARS_NAME__ = "context_variables"
-
 
 class Swarm:
     def __init__(self, client=None):
@@ -34,10 +42,10 @@ class Swarm:
         agent: Agent,
         history: List,
         context_variables: dict,
-        model_override: str,
+        model_override: str | None,
         stream: bool,
         debug: bool,
-    ) -> ChatCompletionMessage:
+    ) -> ChatCompletion | Stream[ChatCompletionChunk]:
         context_variables = defaultdict(str, context_variables)
         instructions = (
             agent.instructions(context_variables)
@@ -97,6 +105,8 @@ class Swarm:
         partial_response = Response(
             messages=[], agent=None, context_variables={})
 
+        assert partial_response.messages is not None, "partial_response.messages is None"
+
         for tool_call in tool_calls:
             name = tool_call.function.name
             # handle missing tool case, skip to next tool
@@ -139,13 +149,13 @@ class Swarm:
     def run_and_stream(
         self,
         agent: Agent,
-        messages: List,
+        messages: List[Message],
         context_variables: dict = {},
-        model_override: str = None,
+        model_override: Optional[str] = None,
         debug: bool = False,
-        max_turns: int = float("inf"),
+        max_turns: int | float = float("inf"),
         execute_tools: bool = True,
-    ):
+    ) -> StreamingResponse:
         active_agent = agent
         context_variables = copy.deepcopy(context_variables)
         history = copy.deepcopy(messages)
@@ -176,16 +186,18 @@ class Swarm:
                 stream=True,
                 debug=debug,
             )
+            assert isinstance(completion, Stream), "Expected Stream[ChatCompletionChunk] for streaming completion"
 
             yield {"delim": "start"}
             for chunk in completion:
-                delta = json.loads(chunk.choices[0].delta.json())
+                delta = cast(StreamingChunk, chunk.choices[0].delta.model_dump())
                 if delta["role"] == "assistant":
                     delta["sender"] = active_agent.name
                 yield delta
-                delta.pop("role", None)
-                delta.pop("sender", None)
-                merge_chunk(message, delta)
+                to_merge = cast(dict, delta.copy())
+                to_merge.pop("role", None)
+                to_merge.pop("sender", None)
+                merge_chunk(message, to_merge)
             yield {"delim": "end"}
 
             message["tool_calls"] = list(
@@ -193,7 +205,7 @@ class Swarm:
             if not message["tool_calls"]:
                 message["tool_calls"] = None
             debug_print(debug, "Received completion:", message)
-            history.append(message)
+            history.append(cast(Message, message))
 
             if not message["tool_calls"] or not execute_tools:
                 debug_print(debug, "Ending turn.")
@@ -233,12 +245,12 @@ class Swarm:
         agent: Agent,
         messages: List,
         context_variables: dict = {},
-        model_override: str = None,
+        model_override: Optional[str] = None,
         stream: bool = False,
         debug: bool = False,
-        max_turns: int = float("inf"),
+        max_turns: int | float = float("inf"),
         execute_tools: bool = True,
-    ) -> Response:
+    ) -> Response | StreamingResponse:
         if stream:
             return self.run_and_stream(
                 agent=agent,
@@ -265,12 +277,12 @@ class Swarm:
                 stream=stream,
                 debug=debug,
             )
+            assert isinstance(completion, ChatCompletion), "Expected ChatCompletion for non-streaming completion"
             message = completion.choices[0].message
             debug_print(debug, "Received completion:", message)
-            message.sender = active_agent.name
-            history.append(
-                json.loads(message.model_dump_json())
-            )  # to avoid OpenAI types (?)
+            message_json = message.model_dump()
+            message_json["sender"] = active_agent.name
+            history.append(message_json)
 
             if not message.tool_calls or not execute_tools:
                 debug_print(debug, "Ending turn.")

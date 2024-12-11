@@ -1,8 +1,9 @@
 import inspect
 from datetime import datetime
+from typing import Any
 
 
-def debug_print(debug: bool, *args: str) -> None:
+def debug_print(debug: bool, *args: Any) -> None:
     if not debug:
         return
     timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
@@ -25,6 +26,8 @@ def merge_chunk(final_response: dict, delta: dict) -> None:
     tool_calls = delta.get("tool_calls")
     if tool_calls and len(tool_calls) > 0:
         index = tool_calls[0].pop("index")
+        if "type" in tool_calls[0]:
+            final_response["tool_calls"][index]["type"] = tool_calls[0].pop("type")
         merge_fields(final_response["tool_calls"][index], tool_calls[0])
 
 
