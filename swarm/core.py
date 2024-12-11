@@ -186,10 +186,11 @@ class Swarm:
                 stream=True,
                 debug=debug,
             )
-            assert isinstance(completion, Stream), "Expected Stream[ChatCompletionChunk] for streaming completion"
+            assert hasattr(completion, '__iter__') and hasattr(completion, '__next__'), "Expected generator for streaming completion"
 
             yield {"delim": "start"}
             for chunk in completion:
+                chunk = cast(ChatCompletionChunk, chunk)
                 delta = cast(StreamingChunk, chunk.choices[0].delta.model_dump())
                 if delta["role"] == "assistant":
                     delta["sender"] = active_agent.name
@@ -277,7 +278,8 @@ class Swarm:
                 stream=stream,
                 debug=debug,
             )
-            assert isinstance(completion, ChatCompletion), "Expected ChatCompletion for non-streaming completion"
+            assert not hasattr(completion, '__iter__') and not hasattr(completion, '__next__'), "Expected non-streaming completion"
+            completion = cast(ChatCompletion, completion)
             message = completion.choices[0].message
             debug_print(debug, "Received completion:", message)
             message_json = message.model_dump()
