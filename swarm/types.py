@@ -13,7 +13,7 @@ from typing import Any, Dict, Generator, List, Callable, TypedDict, Union, Optio
 # Third-party imports
 from pydantic import BaseModel
 
-AgentFunction = Callable[..., Union[str, "Agent", dict]]
+AgentFunction = Callable[..., Union[str, "Agent", dict, "Result"]]
 
 AgentInstructions: TypeAlias = Union[str, Callable[..., str]]
 
