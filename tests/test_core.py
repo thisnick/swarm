@@ -1,5 +1,6 @@
 import pytest
 from swarm import Swarm, Agent
+from swarm.types import Response
 from tests.mock_client import MockOpenAIClient, create_mock_response
 from unittest.mock import Mock
 import json
@@ -22,6 +23,7 @@ def test_run_with_simple_message(mock_openai_client: MockOpenAIClient):
     client = Swarm(client=mock_openai_client)
     messages = [{"role": "user", "content": "Hello, how are you?"}]
     response = client.run(agent=agent, messages=messages)
+    assert isinstance(response, Response)
 
     # assert response content
     assert response.messages[-1]["role"] == "assistant"
@@ -63,6 +65,7 @@ def test_tool_call(mock_openai_client: MockOpenAIClient):
     response = client.run(agent=agent, messages=messages)
 
     get_weather_mock.assert_called_once_with(location=expected_location)
+    assert isinstance(response, Response)
     assert response.messages[-1]["role"] == "assistant"
     assert response.messages[-1]["content"] == DEFAULT_RESPONSE_CONTENT
 
@@ -100,6 +103,7 @@ def test_execute_tools_false(mock_openai_client: MockOpenAIClient):
     # set up client and run
     client = Swarm(client=mock_openai_client)
     response = client.run(agent=agent, messages=messages, execute_tools=False)
+    assert isinstance(response, Response)
     print(response)
 
     # assert function not called
@@ -139,6 +143,7 @@ def test_handoff(mock_openai_client: MockOpenAIClient):
     client = Swarm(client=mock_openai_client)
     messages = [{"role": "user", "content": "I want to talk to agent 2"}]
     response = client.run(agent=agent1, messages=messages)
+    assert isinstance(response, Response)
 
     assert response.agent == agent2
     assert response.messages[-1]["role"] == "assistant"

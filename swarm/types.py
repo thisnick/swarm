@@ -33,7 +33,9 @@ Message : TypeAlias = Dict[Literal[
     "function_call",
     "tool_calls",
     "tool_call_id",
-    "tool_name"
+    "tool_name",
+    "audio",
+    "refusal",
 ], Any]
 
 class Response(BaseModel):

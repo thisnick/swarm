@@ -29,13 +29,29 @@ from .types import (
     Message,
 )
 
+from tenacity import (
+    retry,
+    stop_after_attempt,
+    wait_exponential,
+) # for exponential backoff
+
 __CTX_VARS_NAME__ = "context_variables"
 
 class Swarm:
-    def __init__(self, client=None):
+    def __init__(self, client=None, exponential_backoff=True):
         if not client:
             client = OpenAI()
         self.client = client
+        self.exponential_backoff = exponential_backoff
+
+    @property
+    def retry_decorator(self):
+        if self.exponential_backoff:
+            return retry(
+                stop=stop_after_attempt(5),
+                wait=wait_exponential(multiplier=3, min=1, max=100),
+            )
+        return lambda x: x
 
     def get_chat_completion(
         self,
@@ -81,7 +97,11 @@ class Swarm:
         if tools:
             create_params["parallel_tool_calls"] = agent.parallel_tool_calls
 
-        return self.client.chat.completions.create(**create_params)
+        @self.retry_decorator
+        def _create_completion():
+            return self.client.chat.completions.create(**create_params)
+
+        return _create_completion()
 
     def handle_function_result(self, result, debug) -> Result:
         match result:
@@ -285,7 +305,6 @@ class Swarm:
                 stream=stream,
                 debug=debug,
             )
-            assert not hasattr(completion, '__iter__') and not hasattr(completion, '__next__'), "Expected non-streaming completion"
             completion = cast(ChatCompletion, completion)
             message = completion.choices[0].message
             debug_print(debug, "Received completion:", message)
