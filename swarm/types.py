@@ -81,3 +81,8 @@ StreamingResponse: TypeAlias = Generator[
   None,
   None
 ]
+
+class RetryState(BaseModel):
+  tries: int = 0
+  sleep_time: int = 0
+  error: str = ""

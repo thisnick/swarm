@@ -2,10 +2,12 @@
 import copy
 import json
 from collections import defaultdict
+import time
 from typing import (
     Any,
     Awaitable,
     Callable,
+    Generator,
     List,
     Optional,
     Union,
@@ -27,43 +29,28 @@ from .types import (
     Function,
     Response,
     Result,
+    RetryState,
     Stream,
     StreamingResponse,
     MessageStreamingChunk,
     Message,
 )
 
-from tenacity import (
-    retry,
-    stop_after_attempt,
-    wait_exponential,
-    RetryCallState,
-) # for exponential backoff
-
 __CTX_VARS_NAME__ = "context_variables"
+RETRY_TIMES = [0, 5, 10, 30, 60]
 
 class Swarm:
     def __init__(
         self,
         client=None,
         exponential_backoff: bool = True,
-        retry_callback: Optional[Callable[[RetryCallState], Union[Any, Awaitable[Any]]]] = None,
+        retry_callback: Optional[Callable[[RetryState], Any]] = None,
     ):
         if not client:
             client = OpenAI()
         self.client = client
         self.exponential_backoff = exponential_backoff
         self.retry_callback = retry_callback
-
-    @property
-    def retry_decorator(self):
-        if self.exponential_backoff:
-            return retry(
-                stop=stop_after_attempt(5),
-                wait=wait_exponential(multiplier=3, min=1, max=100),
-                retry_error_callback=self.retry_callback,
-            )
-        return lambda x: x
 
     def get_chat_completion(
         self,
@@ -109,11 +96,7 @@ class Swarm:
         if tools:
             create_params["parallel_tool_calls"] = agent.parallel_tool_calls
 
-        @self.retry_decorator
-        def _create_completion():
-            return self.client.chat.completions.create(**create_params)
-
-        return _create_completion()
+        return self.client.chat.completions.create(**create_params)
 
     def handle_function_result(self, result, debug) -> Result:
         match result:
@@ -185,6 +168,60 @@ class Swarm:
 
         return partial_response
 
+    def _get_streaming_completion_with_retry(
+        self,
+        active_agent: Agent,
+        history: List[Message],
+        context_variables: dict,
+        model_override: Optional[str],
+        debug: bool,
+        message: dict
+    ) -> StreamingResponse:
+        tries = 0
+        while True:
+            try:
+                completion = self.get_chat_completion(
+                    agent=active_agent,
+                    history=history,
+                    context_variables=context_variables,
+                    model_override=model_override,
+                    stream=True,
+                    debug=debug,
+                )
+                assert hasattr(completion, '__iter__') and hasattr(completion, '__next__'), "Expected generator for streaming completion"
+                yielded_start = False
+
+                for chunk in completion:
+                    if not yielded_start:
+                        yield {"delim": "start"}
+                        yielded_start = True
+
+                    chunk = cast(ChatCompletionChunk, chunk)
+                    delta = cast(MessageStreamingChunk, chunk.choices[0].delta.model_dump())
+                    if delta["role"] == "assistant":
+                        delta["sender"] = active_agent.name
+                    yield delta
+                    to_merge = cast(dict, delta.copy())
+                    to_merge.pop("role", None)
+                    to_merge.pop("sender", None)
+                    merge_chunk(message, to_merge)
+
+                yield {"delim": "end"}
+                break
+            except Exception as e:
+                if self.retry_callback:
+                    self.retry_callback(
+                        RetryState(
+                            error=str(e),
+                            tries=tries,
+                            sleep_time=RETRY_TIMES[tries] if self.exponential_backoff else 0,
+                        )
+                    )
+                tries += 1
+                if tries >= len(RETRY_TIMES) or not self.exponential_backoff:
+                    raise e
+                time.sleep(RETRY_TIMES[tries])
+
     def run_and_stream(
         self,
         agent: Agent,
@@ -216,29 +253,15 @@ class Swarm:
                 ),
             }
 
-            # get completion with current history, agent
-            completion = self.get_chat_completion(
-                agent=active_agent,
+            for chunk in self._get_streaming_completion_with_retry(
+                active_agent=active_agent,
                 history=history,
                 context_variables=context_variables,
                 model_override=model_override,
-                stream=True,
                 debug=debug,
-            )
-            assert hasattr(completion, '__iter__') and hasattr(completion, '__next__'), "Expected generator for streaming completion"
-
-            yield {"delim": "start"}
-            for chunk in completion:
-                chunk = cast(ChatCompletionChunk, chunk)
-                delta = cast(MessageStreamingChunk, chunk.choices[0].delta.model_dump())
-                if delta["role"] == "assistant":
-                    delta["sender"] = active_agent.name
-                yield delta
-                to_merge = cast(dict, delta.copy())
-                to_merge.pop("role", None)
-                to_merge.pop("sender", None)
-                merge_chunk(message, to_merge)
-            yield {"delim": "end"}
+                message=message
+            ):
+                yield chunk
 
             message["tool_calls"] = list(
                 message.get("tool_calls", {}).values())
