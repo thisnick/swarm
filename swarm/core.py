@@ -3,8 +3,12 @@ import copy
 import json
 from collections import defaultdict
 from typing import (
+    Any,
+    Awaitable,
+    Callable,
     List,
     Optional,
+    Union,
     cast,
 )
 
@@ -33,16 +37,23 @@ from tenacity import (
     retry,
     stop_after_attempt,
     wait_exponential,
+    RetryCallState,
 ) # for exponential backoff
 
 __CTX_VARS_NAME__ = "context_variables"
 
 class Swarm:
-    def __init__(self, client=None, exponential_backoff=True):
+    def __init__(
+        self,
+        client=None,
+        exponential_backoff: bool = True,
+        retry_callback: Optional[Callable[[RetryCallState], Union[Any, Awaitable[Any]]]] = None,
+    ):
         if not client:
             client = OpenAI()
         self.client = client
         self.exponential_backoff = exponential_backoff
+        self.retry_callback = retry_callback
 
     @property
     def retry_decorator(self):
@@ -50,6 +61,7 @@ class Swarm:
             return retry(
                 stop=stop_after_attempt(5),
                 wait=wait_exponential(multiplier=3, min=1, max=100),
+                retry_error_callback=self.retry_callback,
             )
         return lambda x: x
 
