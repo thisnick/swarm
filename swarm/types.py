@@ -58,7 +58,7 @@ class Result(BaseModel):
     agent: Optional[Agent] = None
     context_variables: dict = {}
 
-class StreamingChunk(TypedDict):
+class MessageStreamingChunk(TypedDict):
     content: Any
     sender: str
     role: Literal["system", "user", "assistant", "tool"]
@@ -68,11 +68,15 @@ class StreamingChunk(TypedDict):
 DelimStreamingChunk = dict[Literal["delim"], Literal["start", "end"]]
 ResponseStreamingChunk = dict[Literal["response"], Response]
 
+class DeltaResponseStreamingChunk(TypedDict):
+    partial_response: Response
+
 StreamingResponse: TypeAlias = Generator[
   Union[
     DelimStreamingChunk,
-    StreamingChunk,
-    ResponseStreamingChunk
+    MessageStreamingChunk,
+    ResponseStreamingChunk,
+    DeltaResponseStreamingChunk,
   ],
   None,
   None

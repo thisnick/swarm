@@ -6,7 +6,7 @@ from swarm.types import (
     Agent,
     Response,
     StreamingResponse,
-    StreamingChunk,
+    MessageStreamingChunk,
     DelimStreamingChunk,
     ResponseStreamingChunk,
 )
@@ -18,19 +18,19 @@ def process_and_print_streaming_response(response : StreamingResponse) -> Option
 
     for chunk in response:
         if "sender" in chunk:
-            chunk = cast(StreamingChunk, chunk)
+            chunk = cast(MessageStreamingChunk, chunk)
             last_sender = chunk["sender"]
 
-        if "content" in chunk and cast(StreamingChunk, chunk)["content"] is not None:
-            chunk = cast(StreamingChunk, chunk)
+        if "content" in chunk and cast(MessageStreamingChunk, chunk)["content"] is not None:
+            chunk = cast(MessageStreamingChunk, chunk)
             if not content and last_sender:
                 print(f"\033[94m{last_sender}:\033[0m", end=" ", flush=True)
                 last_sender = ""
             print(chunk["content"], end="", flush=True)
             content += chunk["content"]
 
-        if "tool_calls" in chunk and cast(StreamingChunk, chunk)["tool_calls"] is not None:
-            for tool_call in cast(StreamingChunk, chunk)["tool_calls"]:
+        if "tool_calls" in chunk and cast(MessageStreamingChunk, chunk)["tool_calls"] is not None:
+            for tool_call in cast(MessageStreamingChunk, chunk)["tool_calls"]:
                 f = tool_call["function"]
                 name = f["name"]
                 if not name:

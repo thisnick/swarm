@@ -25,7 +25,7 @@ from .types import (
     Result,
     Stream,
     StreamingResponse,
-    StreamingChunk,
+    MessageStreamingChunk,
     Message,
 )
 
@@ -218,7 +218,7 @@ class Swarm:
             yield {"delim": "start"}
             for chunk in completion:
                 chunk = cast(ChatCompletionChunk, chunk)
-                delta = cast(StreamingChunk, chunk.choices[0].delta.model_dump())
+                delta = cast(MessageStreamingChunk, chunk.choices[0].delta.model_dump())
                 if delta["role"] == "assistant":
                     delta["sender"] = active_agent.name
                 yield delta
@@ -255,6 +255,7 @@ class Swarm:
             partial_response = self.handle_tool_calls(
                 tool_calls, active_agent.functions, context_variables, debug
             )
+            yield {"partial_response": partial_response}
             history.extend(partial_response.messages)
             context_variables.update(partial_response.context_variables)
             if partial_response.agent:
