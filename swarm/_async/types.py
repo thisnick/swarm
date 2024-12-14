@@ -51,7 +51,7 @@ class AsyncResult(BaseResult[AsyncAgent]):
 AsyncDelimStreamingChunk = dict[Literal["delim"], Literal["start", "end"]]
 AsyncResponseStreamingChunk = dict[Literal["response"], AsyncResponse]
 
-class DeltaAsyncResponseStreamingChunk(TypedDict):
+class AsyncDeltaResponseStreamingChunk(TypedDict):
     partial_response: AsyncResponse
 
 AsyncStreamingResponse: TypeAlias = AsyncGenerator[
@@ -59,7 +59,7 @@ AsyncStreamingResponse: TypeAlias = AsyncGenerator[
     AsyncDelimStreamingChunk,
     AsyncMessageStreamingChunk,
     AsyncResponseStreamingChunk,
-    DeltaAsyncResponseStreamingChunk,
+    AsyncDeltaResponseStreamingChunk,
   ],
   None
 ]
