@@ -19,7 +19,7 @@ from openai import OpenAI
 
 
 # Local imports
-from .util import function_to_json, debug_print, merge_chunk
+from swarm.util import function_to_json, debug_print, merge_chunk
 from .types import (
     Agent,
     AgentFunction,
@@ -98,7 +98,7 @@ class Swarm:
 
         return self.client.chat.completions.create(**create_params)
 
-    def handle_function_result(self, result, debug) -> Result:
+    def handle_function_result(self, result: Union[str, Agent, dict, Result], debug: bool) -> Result:
         match result:
             case Result() as result:
                 return result
