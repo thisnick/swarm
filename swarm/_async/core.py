@@ -64,7 +64,7 @@ class AsyncSwarm:
     ) -> ChatCompletion | AsyncStream[ChatCompletionChunk]:
         context_variables = defaultdict(str, context_variables)
         instructions = (
-            agent.instructions(context_variables)
+            await agent.instructions(context_variables)
             if callable(agent.instructions)
             else agent.instructions
         )
