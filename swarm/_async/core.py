@@ -14,6 +14,7 @@ from typing import (
     Union,
     cast,
 )
+import asyncio
 
 # Package/library imports
 from openai import AsyncOpenAI
@@ -225,7 +226,7 @@ class AsyncSwarm:
                 tries += 1
                 if tries >= len(RETRY_TIMES) or not self.exponential_backoff:
                     raise e
-                time.sleep(RETRY_TIMES[tries])
+                await asyncio.sleep(RETRY_TIMES[tries])
 
     async def run_and_stream(
         self,
