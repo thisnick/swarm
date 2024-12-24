@@ -274,6 +274,7 @@ class AsyncSwarm:
             if not message["tool_calls"]:
                 message["tool_calls"] = None
             debug_print(debug, "Received completion:", message)
+            message["sender"] = active_agent.name
             history.append(cast(Message, message))
 
             if not message["tool_calls"] or not execute_tools:
