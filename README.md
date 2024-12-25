@@ -14,7 +14,7 @@ An educational framework exploring ergonomic, lightweight multi-agent orchestrat
 Requires Python 3.10+
 
 ```shell
-pip install swarm_plus
+pip install flex-swarm
 ```
 
 ## Usage
