@@ -4,6 +4,9 @@ from swarm.types import Response
 from tests.mock_client import MockOpenAIClient, create_mock_response
 from unittest.mock import Mock
 import json
+from pydantic import BaseModel
+import inspect
+from typing import Any, Callable, Dict, List
 
 DEFAULT_RESPONSE_CONTENT = "sample response content"
 
@@ -148,3 +151,47 @@ def test_handoff(mock_openai_client: MockOpenAIClient):
     assert response.agent == agent2
     assert response.messages[-1]["role"] == "assistant"
     assert response.messages[-1]["content"] == DEFAULT_RESPONSE_CONTENT
+
+
+# Define Pydantic models
+class WeatherRequest(BaseModel):
+    location: str
+
+
+def test_tool_with_pydantic_arguments(mock_openai_client: MockOpenAIClient):
+    expected_location = "New York"
+
+    # Define the Pydantic-based function
+    get_weather_mock = Mock()
+    def get_weather(request: WeatherRequest):
+        get_weather_mock(request=request)
+        return f"The weather in {request.location} is sunny."
+
+    agent = Agent(name="Weather Agent", functions=[get_weather])
+
+    messages = [
+        {"role": "user", "content": f"What's the weather like in {expected_location}?"}
+    ]
+
+    mock_openai_client.set_sequential_responses(
+        [
+            create_mock_response(
+                message={"role": "assistant", "content": ""},
+                function_calls=[
+                    {"name": "get_weather", "args": {"request": {"location": expected_location}}}
+                ],
+            ),
+            create_mock_response(
+                {"role": "assistant", "content": DEFAULT_RESPONSE_CONTENT}
+            ),
+        ]
+    )
+
+    client = Swarm(client=mock_openai_client)
+    response = client.run(agent=agent, messages=messages)
+
+    called_args = get_weather_mock.call_args
+    print("called_args", called_args)
+    args, kwargs = called_args
+    assert isinstance(kwargs['request'], WeatherRequest)
+    assert kwargs['request'].location == expected_location

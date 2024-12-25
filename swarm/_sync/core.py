@@ -1,3 +1,5 @@
+# Code generated from codegen/templates/swarm/(sync)/core.py.jinja2. DO NOT EDIT MANUALLY!
+
 # Standard library imports
 import copy
 import json
@@ -5,7 +7,6 @@ from collections import defaultdict
 import time
 from typing import (
     Any,
-    Awaitable,
     Callable,
     Generator,
     List,
@@ -13,13 +14,14 @@ from typing import (
     Union,
     cast,
 )
+import time
 
 # Package/library imports
 from openai import OpenAI
 
 
 # Local imports
-from swarm.util import function_to_json, debug_print, merge_chunk
+from swarm.util import function_to_json, debug_print, merge_chunk, json_to_function_args
 from .types import (
     Agent,
     AgentFunction,
@@ -143,7 +145,7 @@ class Swarm:
                     }
                 )
                 continue
-            args = json.loads(tool_call.function.arguments)
+            args = json_to_function_args(function_map[name], json.loads(tool_call.function.arguments))
             debug_print(
                 debug, f"Processing tool call: {name} with arguments {args}")
 
@@ -189,6 +191,7 @@ class Swarm:
                     debug=debug,
                 )
                 assert hasattr(completion, '__iter__') and hasattr(completion, '__next__'), "Expected generator for streaming completion"
+                completion = cast(Stream[ChatCompletionChunk], completion)
                 yielded_start = False
 
                 for chunk in completion:

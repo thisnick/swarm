@@ -1,6 +1,7 @@
 import inspect
 from datetime import datetime
-from typing import Any
+from typing import Any, List, get_origin, get_args, Callable, Dict
+from pydantic import BaseModel, TypeAdapter
 
 
 def debug_print(debug: bool, *args: Any) -> None:
@@ -31,6 +32,24 @@ def merge_chunk(final_response: dict, delta: dict) -> None:
         merge_fields(final_response["tool_calls"][index], tool_calls[0])
 
 
+def remove_titles(schema: dict | list) -> dict | list:
+    """
+    Recursively removes 'title' keys from the schema dictionary.
+
+    Args:
+        schema: The schema dictionary from which to remove 'title' keys.
+
+    Returns:
+        The schema dictionary without 'title' keys.
+    """
+    if isinstance(schema, dict):
+        schema.pop('title', None)
+        for key, value in schema.items():
+            schema[key] = remove_titles(value)
+    elif isinstance(schema, list):
+        schema = [remove_titles(item) for item in schema]
+    return schema
+
 def function_to_json(func) -> dict:
     """
     Converts a Python function into a JSON-serializable dictionary
@@ -53,6 +72,7 @@ def function_to_json(func) -> dict:
         type(None): "null",
     }
 
+
     try:
         signature = inspect.signature(func)
     except ValueError as e:
@@ -62,13 +82,43 @@ def function_to_json(func) -> dict:
 
     parameters = {}
     for param in signature.parameters.values():
+        annotation = param.annotation
         try:
-            param_type = type_map.get(param.annotation, "string")
+            origin = get_origin(annotation)
+            args = get_args(annotation)
+
+            if isinstance(annotation, type) and issubclass(annotation, BaseModel):
+                schema = annotation.model_json_schema()
+                schema = remove_titles(schema)
+                parameters[param.name] = schema
+            elif origin is list and len(args) == 1:
+                item_type = args[0]
+                if isinstance(item_type, type) and issubclass(item_type, BaseModel):
+                    # Handle list of BaseModel subclasses
+                    item_schema = item_type.model_json_schema()
+                    item_schema = remove_titles(item_schema)
+                    parameters[param.name] = {
+                        "type": "array",
+                        "items": item_schema,
+                    }
+                elif item_type in type_map:
+                    # Handle list of primitive types
+                    parameters[param.name] = {
+                        "type": "array",
+                        "items": {"type": type_map.get(item_type, "string")},
+                    }
+                else:
+                    # Default to string if type is unknown
+                    parameters[param.name] = {
+                        "type": "array",
+                        "items": {"type": "string"},
+                    }
+            else:
+                parameters[param.name] = {"type": type_map.get(annotation, "string")}
         except KeyError as e:
             raise KeyError(
-                f"Unknown type annotation {param.annotation} for parameter {param.name}: {str(e)}"
+                f"Unknown type annotation {annotation} for parameter {param.name}: {str(e)}"
             )
-        parameters[param.name] = {"type": param_type}
 
     required = [
         param.name
@@ -88,3 +138,31 @@ def function_to_json(func) -> dict:
             },
         },
     }
+
+def json_to_function_args(func: Callable, json_args: Dict[str, Any]) -> Dict[str, Any]:
+    """Converts a JSON object to function arguments based on the function's annotations."""
+    sig = inspect.signature(func)
+    args = {}
+    for name, param in sig.parameters.items():
+        if name in json_args:
+            annotation = param.annotation
+            value = json_args[name]
+            if inspect.isclass(annotation) and issubclass(annotation, BaseModel):
+                args[name] = annotation(**value)
+            elif (
+                getattr(annotation, '__origin__', None) is list and
+                hasattr(annotation, '__args__') and
+                len(annotation.__args__) > 0
+            ):
+                item_type = annotation.__args__[0]
+                if inspect.isclass(item_type) and issubclass(item_type, BaseModel):
+                    args[name] = [item_type(**item) for item in value]
+                elif item_type in [str, int, float, bool]:
+                    args[name] = value  # Assuming the list is of the correct primitive type
+                else:
+                    args[name] = value  # Default to passing the value as is
+            else:
+                args[name] = value
+        else:
+            args[name] = param.default
+    return args
