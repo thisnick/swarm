@@ -49,7 +49,7 @@ class AsyncSwarm:
     def __init__(
         self,
         client=None,
-        exponential_backoff: bool = True,
+        exponential_backoff: bool = False,
         retry_callback: Optional[Callable[[RetryState], Any]] = None,
     ):
         if not client:

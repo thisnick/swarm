@@ -14,13 +14,7 @@ An educational framework exploring ergonomic, lightweight multi-agent orchestrat
 Requires Python 3.10+
 
 ```shell
-pip install git+ssh://git@github.com/openai/swarm.git
-```
-
-or
-
-```shell
-pip install git+https://github.com/openai/swarm.git
+pip install swarm_plus
 ```
 
 ## Usage
@@ -59,17 +53,68 @@ New paths converge gracefully,
 What can I assist?
 ```
 
+## Async Usage
+
+This library also adds async functionality
+
+```python
+from swarm import AsyncSwarm, AsyncAgent
+import asyncio
+
+client = AsyncSwarm()
+
+async def transfer_to_agent_b():
+   return agent_b
+
+
+agent_a = AsyncAgent(
+   name="Agent A",
+   instructions="You are a helpful agent.",
+   functions=[transfer_to_agent_b],
+)
+
+agent_b = AsyncAgent(
+   name="Agent B",
+   instructions="Only speak in Haikus.",
+)
+
+async def main():
+   response = await client.run(
+      agent=agent_a,
+      messages=[{"role": "user", "content": "I want to talk to agent B."}],
+)
+   print(response.messages[-1]["content"])
+
+asyncio.run(main())
+```
+
+
 ## Table of Contents
 
+- [Swarm (experimental, educational)](#swarm-experimental-educational)
+  - [Install](#install)
+  - [Usage](#usage)
+  - [Async Usage](#async-usage)
+  - [Table of Contents](#table-of-contents)
 - [Overview](#overview)
+  - [Why Swarm](#why-swarm)
 - [Examples](#examples)
 - [Documentation](#documentation)
   - [Running Swarm](#running-swarm)
+    - [Run options](#run-options)
+    - [`client.run()`](#clientrun)
+      - [Arguments](#arguments)
+      - [`Response` Fields](#response-fields)
   - [Agents](#agents)
+  - [`Agent` Fields](#agent-fields)
+    - [Instructions](#instructions)
   - [Functions](#functions)
+    - [Handoffs and Updating Context Variables](#handoffs-and-updating-context-variables)
+    - [Function Schemas](#function-schemas)
   - [Streaming](#streaming)
 - [Evaluations](#evaluations)
 - [Utils](#utils)
+- [Core Contributors](#core-contributors)
 
 # Overview
 
@@ -112,6 +157,57 @@ from swarm import Swarm
 
 client = Swarm()
 ```
+
+You can also run the async version:
+
+```python
+from swarm import AsyncSwarm
+
+client = AsyncSwarm()
+```
+
+### Run options
+
+If you use Litellm, you can pass a litellm client to swarm.
+
+Define a Litellm client like so:
+
+```python
+from typing import Optional, Mapping
+import litellm
+
+class AsyncLiteLLM:
+    def __init__(
+        self,
+        *,
+        api_key=None,
+        organization: Optional[str] = None,
+        base_url: Optional[str] = None,
+        timeout: Optional[float] = 600,
+        max_retries: Optional[int] = litellm.num_retries,
+        default_headers: Optional[Mapping[str, str]] = None,
+    ):
+        self.params = locals()
+        self.params['acompletion'] = True
+        self.chat = litellm.Chat(self.params, router_obj=None)
+```
+
+Then pass it to the client:
+
+```python
+llm_client = AsyncLiteLLM()
+swarm = AsyncSwarm(client=llm_client)
+```
+
+You can also enable exponential backoff like this:
+
+```python
+swarm = AsyncSwarm(
+   exponential_backoff=True,
+   retry_callback=lambda _: print("Retrying...")
+)
+```
+
 
 ### `client.run()`
 
